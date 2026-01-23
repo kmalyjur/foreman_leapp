@@ -4,7 +4,7 @@ exports[`PreupgradeReports should render error 1`] = `
 <MessageBox
   icontype="error-circle-o"
   key="preupgrade-reports-error"
-  msg="Could not retrieve data: %(status) - %(msg)"
+  msg="Could not retrieve data: Internal server error - Well, this is embarassing"
 />
 `;
 

@@ -2,18 +2,24 @@
 
 exports[`NoReports should render when reports expected 1`] = `
 <EmptyStatePattern
+  action={null}
   description="The preupgrade report could not be generated, check the job details for the reason"
+  documentation={null}
   header="No Preupgrade Report Available"
   icon="warning-triangle-o"
   iconType="pf"
+  secondaryActions={Array []}
 />
 `;
 
 exports[`NoReports should render when reports not expected 1`] = `
 <EmptyStatePattern
+  action={null}
   description="The preupgrade report will be available after the job finishes"
+  documentation={null}
   header="No Preupgrade Report Available"
   icon="in-progress"
   iconType="pf"
+  secondaryActions={Array []}
 />
 `;

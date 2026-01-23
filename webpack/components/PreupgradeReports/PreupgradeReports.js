@@ -119,7 +119,7 @@ const withLoadingState = Component => componentProps => {
       <MessageBox
         key="preupgrade-reports-error"
         icontype="error-circle-o"
-        msg={sprintf(__('Could not retrieve data: %(status) - %(msg)'), {
+        msg={sprintf(__('Could not retrieve data: %(status)s - %(msg)s'), {
           status: error.statusText,
           msg: error.errorMsg,
         })}

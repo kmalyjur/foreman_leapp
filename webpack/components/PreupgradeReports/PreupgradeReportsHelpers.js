@@ -57,9 +57,9 @@ export const idsForInvocationFromReports = reports =>
   idsForInvocationFromEntries(flattenEntries(reports));
 
 export const entriesPage = (entries, pagination) => {
-  const offset = (pagination.page - 1) * pagination.per_page;
+  const offset = (pagination.page - 1) * pagination.perPage;
 
-  return entries.slice(offset, offset + pagination.per_page);
+  return entries.slice(offset, offset + pagination.perPage);
 };
 
 export const filterEntries = (attribute, value, entries) => {

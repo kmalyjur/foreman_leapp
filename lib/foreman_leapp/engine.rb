@@ -40,6 +40,8 @@ module ForemanLeapp
                                               :resource_type => 'JobInvocation'
           end
 
+          register_global_js_file 'global'
+
           describe_host do
             multiple_actions_provider :leapp_hosts_multiple_actions
           end

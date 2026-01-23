@@ -131,7 +131,31 @@ Array [
 ]
 `;
 
-exports[`PreupgradeReportsHelpers should return entries page 1`] = `Array []`;
+exports[`PreupgradeReportsHelpers should return entries page 1`] = `
+Array [
+  Object {
+    "flags": Array [],
+    "hostname": "foo.example.com",
+    "id": 45,
+    "severity": "low",
+    "title": "Not enough credits",
+  },
+  Object {
+    "flags": Array [],
+    "hostname": "foo.example.com",
+    "id": 46,
+    "severity": "medium",
+    "title": "SELinux is turned off",
+  },
+  Object {
+    "flags": Array [],
+    "hostname": "foo.example.com",
+    "id": 47,
+    "severity": "medium",
+    "title": "Root password is too short",
+  },
+]
+`;
 
 exports[`PreupgradeReportsHelpers should return fixable entries 1`] = `
 Array [
