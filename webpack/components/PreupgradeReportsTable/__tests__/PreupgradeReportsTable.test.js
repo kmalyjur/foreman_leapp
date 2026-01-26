@@ -18,13 +18,19 @@ const mockJobData = {
   template_name: 'Run preupgrade via Leapp',
 };
 
+// Updated mock entries with data needed for ReportDetails
 const mockEntries = Array.from({ length: 12 }, (_, i) => ({
   id: i + 1,
   title: `Report Entry ${i + 1}`,
   hostname: 'example.com',
   severity: i === 0 ? 'high' : 'low',
+  summary: `Summary for report entry ${i + 1}`,
+  tags: i === 0 ? ['security', 'network'] : [],
   flags: i === 0 ? ['inhibitor'] : [],
-  detail: { remediations: i === 0 ? [{ type: 'cmd' }] : [] },
+  detail: { 
+    remediations: i === 0 ? [{ type: 'command', context: ['echo', 'fix_command'] }] : [],
+    external: i === 0 ? [{ url: 'http://example.com', title: 'External Link' }] : []
+  },
 }));
 
 describe('PreupgradeReportsTable', () => {
@@ -63,35 +69,78 @@ describe('PreupgradeReportsTable', () => {
     renderComponent();
     expandSection();
 
-    await waitFor(() => screen.getByText('Report Entry 1'));
+    // Use selector: 'td' to ensure we only find the table cell title, avoiding duplicates
+    await waitFor(() => screen.getByText('Report Entry 1', { selector: 'td' }));
 
-    expect(screen.getByText('Report Entry 1')).toBeInTheDocument();
-    expect(screen.getByText('Report Entry 5')).toBeInTheDocument();
+    expect(screen.getByText('Report Entry 1', { selector: 'td' })).toBeInTheDocument();
+    expect(screen.getByText('Report Entry 5', { selector: 'td' })).toBeInTheDocument();
     expect(screen.queryByText('Report Entry 6')).not.toBeInTheDocument();
+  });
+
+  it('expands a row and shows details', async () => {
+    renderComponent();
+    expandSection();
+    await waitFor(() => screen.getByText('Report Entry 1', { selector: 'td' }));
+
+    // Find the expand button for the first row
+    const rowExpandButtons = screen.getAllByLabelText('Details');
+    fireEvent.click(rowExpandButtons[0]);
+
+    // Assert that the detailed information from ReportDetails is visible.
+    // Since we only render details for the expanded row, "Summary" is unique.
+    expect(screen.getByText('Summary')).toBeInTheDocument();
+    expect(screen.getByText('Summary for report entry 1')).toBeInTheDocument();
+    
+    // Check Tags
+    expect(screen.getByText('Tags')).toBeInTheDocument();
+    expect(screen.getByText('security')).toBeInTheDocument();
+    
+    // Check Remediations
+    expect(screen.getByText('Command')).toBeInTheDocument();
+    expect(screen.getByText('echo fix_command')).toBeInTheDocument();
+
+    // Check Links
+    expect(screen.getByText('Links')).toBeInTheDocument();
+    expect(screen.getByText('External Link')).toBeInTheDocument();
+  });
+
+  it('expands all rows', async () => {
+    renderComponent();
+    expandSection();
+    await waitFor(() => screen.getByText('Report Entry 1', { selector: 'td' }));
+
+    // Find the "Expand all" button in the table header
+    const expandAllButton = screen.getByLabelText('Expand all rows');
+    fireEvent.click(expandAllButton);
+
+    // Assert that details for multiple rows are now visible
+    // We check specific unique text to avoid "Found multiple elements" error
+    expect(screen.getByText('Summary for report entry 1')).toBeInTheDocument();
+    expect(screen.getByText('Summary for report entry 5')).toBeInTheDocument();
   });
 
   it('paginates to the next page', async () => {
     renderComponent();
     expandSection();
-    await waitFor(() => screen.getByText('Report Entry 1'));
+    await waitFor(() => screen.getByText('Report Entry 1', { selector: 'td' }));
 
     fireEvent.click(screen.getAllByLabelText('Go to next page')[0]);
 
-    await waitFor(() => screen.getByText('Report Entry 6'));
-    expect(screen.getByText('Report Entry 10')).toBeInTheDocument();
+    await waitFor(() => screen.getByText('Report Entry 6', { selector: 'td' }));
+    expect(screen.getByText('Report Entry 10', { selector: 'td' })).toBeInTheDocument();
     expect(screen.queryByText('Report Entry 1')).not.toBeInTheDocument();
   });
 
   it('changes perPage limit to 10', async () => {
     renderComponent();
     expandSection();
-    await waitFor(() => screen.getByText('Report Entry 1'));
+    await waitFor(() => screen.getByText('Report Entry 1', { selector: 'td' }));
 
     fireEvent.click(screen.getAllByLabelText('Items per page')[0]);
     fireEvent.click(screen.getAllByText('10 per page')[0]);
 
     await waitFor(() => {
-      expect(screen.getByText('Report Entry 10')).toBeInTheDocument();
+      expect(screen.getByText('Report Entry 10', { selector: 'td' })).toBeInTheDocument();
       expect(screen.queryByText('Report Entry 11')).not.toBeInTheDocument();
     });
   });

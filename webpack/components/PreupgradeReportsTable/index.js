@@ -1,35 +1,36 @@
 import PropTypes from 'prop-types';
 import React, { useEffect, useState } from 'react';
 import { useDispatch } from 'react-redux';
-import { ExpandableSection, Label, Tooltip } from '@patternfly/react-core';
+import { ExpandableSection, Tooltip } from '@patternfly/react-core';
+import {
+  ExpandableRowContent,
+  Tbody,
+  Td,
+  Tr,
+} from '@patternfly/react-table';
 import { translate as __ } from 'foremanReact/common/I18n';
 import { Table } from 'foremanReact/components/PF4/TableIndexPage/Table/Table';
+import { getColumnHelpers } from 'foremanReact/components/PF4/TableIndexPage/Table/helpers';
 import { APIActions } from 'foremanReact/redux/API';
 import { STATUS } from 'foremanReact/constants';
 
 import { entriesPage } from '../PreupgradeReports/PreupgradeReportsHelpers';
-
-const renderSeverityLabel = severity => {
-  switch (severity) {
-    case 'high':
-      return <Label color="red">{__('High')}</Label>;
-    case 'medium':
-      return <Label color="orange">{__('Medium')}</Label>;
-    case 'low':
-      return <Label color="blue">{__('Low')}</Label>;
-    case 'info':
-      return <Label color="grey">{__('Info')}</Label>;
-    default:
-      return <Label color="grey">{severity || __('Info')}</Label>;
-  }
-};
+// Updated Import: Get both the component and the helper function from ReportDetails
+import ReportDetails, { renderSeverityLabel } from './ReportDetails';
 
 const PreupgradeReportsTable = ({ data = {} }) => {
   const [error, setError] = useState(null);
-  const [isExpanded, setIsExpanded] = useState(false);
+
+  // Outer expansion state (Leapp Report Section)
+  const [isReportExpanded, setIsReportExpanded] = useState(false);
+
   const [pagination, setPagination] = useState({ page: 1, perPage: 5 });
   const [reportData, setReportData] = useState(null);
   const [status, setStatus] = useState(STATUS.RESOLVED);
+
+  // Inner table expansion state (Rows)
+  const [expandedRowIds, setExpandedRowIds] = useState(new Set());
+
   const dispatch = useDispatch();
   // eslint-disable-next-line camelcase
   const isLeappJob = data?.template_name?.includes('Run preupgrade via Leapp');
@@ -67,7 +68,7 @@ const PreupgradeReportsTable = ({ data = {} }) => {
 
   useEffect(() => {
     let isMounted = true;
-    if (!isLeappJob || !isExpanded || reportData) {
+    if (!isLeappJob || !isReportExpanded || reportData) {
       return undefined;
     }
     setStatus(STATUS.PENDING);
@@ -117,7 +118,7 @@ const PreupgradeReportsTable = ({ data = {} }) => {
     return () => {
       isMounted = false;
     };
-  }, [isExpanded, data.id, isLeappJob, reportData, dispatch]);
+  }, [isReportExpanded, data.id, isLeappJob, reportData, dispatch]);
 
   // eslint-disable-next-line camelcase
   const entries = reportData?.preupgrade_report_entries || [];
@@ -129,15 +130,44 @@ const PreupgradeReportsTable = ({ data = {} }) => {
       page: newParams.page || prev.page,
       perPage: newParams.per_page || prev.perPage,
     }));
+    // Reset expanded rows when changing pages
+    setExpandedRowIds(new Set());
   };
+
+  const toggleRowExpansion = (id, isExpanding) => {
+    setExpandedRowIds(prev => {
+      const newSet = new Set(prev);
+      if (isExpanding) {
+        newSet.add(id);
+      } else {
+        newSet.delete(id);
+      }
+      return newSet;
+    });
+  };
+
+  // Logic to determine if all visible rows are expanded
+  const areAllRowsExpanded =
+    pagedEntries.length > 0 &&
+    pagedEntries.every(entry => expandedRowIds.has(entry.id));
+
+  const handleExpandAll = () => {
+    if (areAllRowsExpanded) {
+      setExpandedRowIds(new Set());
+    } else {
+      setExpandedRowIds(new Set(pagedEntries.map(e => e.id)));
+    }
+  };
+
+  const [columnKeys, keysToColumnNames] = getColumnHelpers(columns);
 
   if (!isLeappJob) return null;
 
   return (
     <ExpandableSection
       className="leapp-report-section"
-      isExpanded={isExpanded}
-      onToggle={(_event, val) => setIsExpanded(val)}
+      isExpanded={isReportExpanded}
+      onToggle={(_event, val) => setIsReportExpanded(val)}
       toggleText={__('Leapp preupgrade report')}
     >
       <Table
@@ -161,7 +191,44 @@ const PreupgradeReportsTable = ({ data = {} }) => {
         isDeleteable={false}
         emptyMessage={__('The preupgrade report shows no issues.')}
         setParams={handleParamsChange}
-      />
+        // Custom body rendering for expandable rows
+        childrenOutsideTbody
+        onExpandAll={handleExpandAll}
+        // Invert the boolean to match the behavior in JobInvocationHostTable
+        areAllRowsExpanded={!areAllRowsExpanded}
+      >
+        {pagedEntries.map((entry, rowIndex) => {
+          const isRowExpanded = expandedRowIds.has(entry.id);
+          return (
+            <Tbody key={entry.id} isExpanded={isRowExpanded}>
+              <Tr ouiaId={`table-row-${rowIndex}`}>
+                <Td
+                  expand={{
+                    rowIndex,
+                    isExpanded: isRowExpanded,
+                    onToggle: (_event, _rowIndex, isOpen) =>
+                      toggleRowExpansion(entry.id, isOpen),
+                  }}
+                />
+                {columnKeys.map(key => (
+                  <Td key={key} dataLabel={keysToColumnNames[key]}>
+                    {columns[key].wrapper
+                      ? columns[key].wrapper(entry)
+                      : entry[key]}
+                  </Td>
+                ))}
+              </Tr>
+              <Tr isExpanded={isRowExpanded}>
+                <Td colSpan={columnKeys.length + 1}>
+                  <ExpandableRowContent>
+                    {isRowExpanded && <ReportDetails entry={entry} />}
+                  </ExpandableRowContent>
+                </Td>
+              </Tr>
+            </Tbody>
+          );
+        })}
+      </Table>
     </ExpandableSection>
   );
 };
