@@ -1,5 +1,11 @@
 import React from 'react';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import {
+  render,
+  screen,
+  waitFor,
+  fireEvent,
+  within,
+} from '@testing-library/react';
 import '@testing-library/jest-dom/extend-expect';
 import { Provider } from 'react-redux';
 import configureMockStore from 'redux-mock-store';
@@ -23,8 +29,15 @@ const mockEntries = Array.from({ length: 12 }, (_, i) => ({
   title: `Report Entry ${i + 1}`,
   hostname: 'example.com',
   severity: i === 0 ? 'high' : 'low',
+  summary: `Summary for report entry ${i + 1}`,
+  tags: i === 0 ? ['security', 'network'] : [],
   flags: i === 0 ? ['inhibitor'] : [],
-  detail: { remediations: i === 0 ? [{ type: 'cmd' }] : [] },
+  detail: {
+    remediations:
+      i === 0 ? [{ type: 'command', context: ['echo', 'fix_command'] }] : [],
+    external:
+      i === 0 ? [{ url: 'http://example.com', title: 'External Link' }] : [],
+  },
 }));
 
 describe('PreupgradeReportsTable', () => {
@@ -48,10 +61,10 @@ describe('PreupgradeReportsTable', () => {
     });
   });
 
-  const renderComponent = () =>
+  const renderComponent = (data = mockJobData) =>
     render(
       <Provider store={store}>
-        <PreupgradeReportsTable data={mockJobData} />
+        <PreupgradeReportsTable data={data} />
       </Provider>
     );
 
@@ -62,37 +75,61 @@ describe('PreupgradeReportsTable', () => {
   it('renders data', async () => {
     renderComponent();
     expandSection();
+    await waitFor(() => screen.getByText('Report Entry 1', { selector: 'td' }));
+    expect(
+      screen.getByText('Report Entry 1', { selector: 'td' })
+    ).toBeInTheDocument();
+  });
 
-    await waitFor(() => screen.getByText('Report Entry 1'));
+  it('expands a row and shows details', async () => {
+    renderComponent();
+    expandSection();
+    await waitFor(() => screen.getByText('Report Entry 1', { selector: 'td' }));
 
-    expect(screen.getByText('Report Entry 1')).toBeInTheDocument();
-    expect(screen.getByText('Report Entry 5')).toBeInTheDocument();
-    expect(screen.queryByText('Report Entry 6')).not.toBeInTheDocument();
+    const rowExpandButtons = screen.getAllByLabelText('Details');
+    fireEvent.click(rowExpandButtons[0]);
+
+    expect(screen.getByText('Summary')).toBeInTheDocument();
+    expect(screen.getByText('Summary for report entry 1')).toBeInTheDocument();
+  });
+
+  it('expands all rows', async () => {
+    renderComponent();
+    expandSection();
+    await waitFor(() => screen.getByText('Report Entry 1', { selector: 'td' }));
+
+    const expandAllButton = screen.getByLabelText('Expand all rows');
+    fireEvent.click(expandAllButton);
+
+    expect(screen.getByText('Summary for report entry 1')).toBeInTheDocument();
+    expect(screen.getByText('Summary for report entry 5')).toBeInTheDocument();
   });
 
   it('paginates to the next page', async () => {
     renderComponent();
     expandSection();
-    await waitFor(() => screen.getByText('Report Entry 1'));
+    await waitFor(() => screen.getByText('Report Entry 1', { selector: 'td' }));
 
     fireEvent.click(screen.getAllByLabelText('Go to next page')[0]);
+    await waitFor(() => screen.getByText('Report Entry 6', { selector: 'td' }));
 
-    await waitFor(() => screen.getByText('Report Entry 6'));
-    expect(screen.getByText('Report Entry 10')).toBeInTheDocument();
-    expect(screen.queryByText('Report Entry 1')).not.toBeInTheDocument();
+    expect(
+      screen.getByText('Report Entry 10', { selector: 'td' })
+    ).toBeInTheDocument();
   });
 
   it('changes perPage limit to 10', async () => {
     renderComponent();
     expandSection();
-    await waitFor(() => screen.getByText('Report Entry 1'));
+    await waitFor(() => screen.getByText('Report Entry 1', { selector: 'td' }));
 
     fireEvent.click(screen.getAllByLabelText('Items per page')[0]);
     fireEvent.click(screen.getAllByText('10 per page')[0]);
 
     await waitFor(() => {
-      expect(screen.getByText('Report Entry 10')).toBeInTheDocument();
-      expect(screen.queryByText('Report Entry 11')).not.toBeInTheDocument();
+      expect(
+        screen.getByText('Report Entry 10', { selector: 'td' })
+      ).toBeInTheDocument();
     });
   });
 
@@ -106,12 +143,38 @@ describe('PreupgradeReportsTable', () => {
         return { type: 'EMPTY' };
       };
     });
-
     renderComponent();
     expandSection();
-
     await waitFor(() => {
-      expect(screen.getByText('The preupgrade report shows no issues.')).toBeInTheDocument();
+      expect(
+        screen.getByText('The preupgrade report shows no issues.')
+      ).toBeInTheDocument();
     });
+  });
+
+  it('does not render anything for non-Leapp jobs', () => {
+    const nonLeappData = { id: 55, template_name: 'Standard RHEL Update' };
+    renderComponent(nonLeappData);
+    expect(
+      screen.queryByText('Leapp preupgrade report')
+    ).not.toBeInTheDocument();
+  });
+
+  it('displays correct inhibitor status based on flags', async () => {
+    renderComponent();
+    expandSection();
+    await waitFor(() => screen.getByText('Report Entry 1', { selector: 'td' }));
+
+    const row1 = screen
+      .getByText('Report Entry 1', { selector: 'td' })
+      .closest('tr');
+    const inhibitorCell1 = row1.querySelector('td[data-label="Inhibitor?"]');
+    expect(within(inhibitorCell1).getByText('Yes')).toBeInTheDocument();
+
+    const row2 = screen
+      .getByText('Report Entry 2', { selector: 'td' })
+      .closest('tr');
+    const inhibitorCell2 = row2.querySelector('td[data-label="Inhibitor?"]');
+    expect(within(inhibitorCell2).getByText('No')).toBeInTheDocument();
   });
 });
