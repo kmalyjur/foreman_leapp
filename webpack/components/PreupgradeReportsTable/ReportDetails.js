@@ -84,26 +84,24 @@ const ReportDetails = ({ entry }) => (
     )}
 
     {entry.detail?.remediations?.length > 0 &&
-      entry.detail.remediations.map((item, i) => {
-        return (
-          <DescriptionListGroup key={`remediations-${i}`}>
-            <DescriptionListTerm>
-              {item.type === 'command' ? __('Command') : __('Hint')}
-            </DescriptionListTerm>
-            <DescriptionListDescription>
-              {item.type === 'command' ? (
-                <code>
-                  {Array.isArray(item.context)
-                    ? item.context.join(' ')
-                    : item.context}
-                </code>
-              ) : (
-                item.context
-              )}
-            </DescriptionListDescription>
-          </DescriptionListGroup>
-        );
-      })}
+      entry.detail.remediations.map((item, i) => (
+        <DescriptionListGroup key={`remediations-${i}`}>
+          <DescriptionListTerm>
+            {item.type === 'command' ? __('Command') : __('Hint')}
+          </DescriptionListTerm>
+          <DescriptionListDescription>
+            {item.type === 'command' ? (
+              <code>
+                {Array.isArray(item.context)
+                  ? item.context.join(' ')
+                  : item.context}
+              </code>
+            ) : (
+              item.context
+            )}
+          </DescriptionListDescription>
+        </DescriptionListGroup>
+      ))}
   </DescriptionList>
 );
 
