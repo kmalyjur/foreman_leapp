@@ -33,4 +33,23 @@ class PreupgradeReportEntryTest < ActiveSupport::TestCase
       assert_equal details.size, 0
     end
   end
+
+  describe 'scoped_search' do
+    it 'filters correctly by has_remediation and inhibitor' do
+      host = FactoryBot.create(:host)
+      report = FactoryBot.create(:preupgrade_report)
+      
+      entry1 = FactoryBot.create(:preupgrade_report_entry, preupgrade_report: report, host: host, 
+                                 flags: ['inhibitor'], 
+                                 detail: { 'remediations' => [{ 'type' => 'hint' }] })
+      entry2 = FactoryBot.create(:preupgrade_report_entry, preupgrade_report: report, host: host, 
+                                 flags: [], 
+                                 detail: nil)
+
+      assert_includes PreupgradeReportEntry.search_for('inhibitor = yes'), entry1
+      assert_not_includes PreupgradeReportEntry.search_for('inhibitor = yes'), entry2
+      assert_includes PreupgradeReportEntry.search_for('has_remediation = no'), entry2
+      assert_not_includes PreupgradeReportEntry.search_for('has_remediation = no'), entry1
+    end
+  end
 end

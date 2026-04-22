@@ -15,8 +15,17 @@ module Api
 
       api :GET, '/preupgrade_reports/:id', N_('Show Preupgrade report')
       param :id, :identifier, required: true
+      param :search, String, required: false, desc: N_('Filter entries')
+      param :order, String, required: false, desc: N_('Sort entries, e.g. "title ASC"')
+      param :page, :number, required: false, desc: N_('Page number')
+      param :per_page, :number, required: false, desc: N_('Items per page')
       def show
         @preupgrade_report = resource_scope.find(params[:id])
+        scope = @preupgrade_report.preupgrade_report_entries
+        @entries = scope.search_for(params[:search], order: params[:order])
+                        .paginate(paginate_options)
+        @total = scope.count
+        @subtotal = @entries.total_entries
       end
 
       api :GET, '/job_invocations/:id/preupgrade_reports', N_('List Preupgrade reports for Job invocation')

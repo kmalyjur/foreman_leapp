@@ -1,6 +1,6 @@
 /* eslint-disable max-lines */
 import PropTypes from 'prop-types';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useDispatch } from 'react-redux';
 import {
   Button,
@@ -19,16 +19,13 @@ import SelectAllCheckbox from 'foremanReact/components/PF4/TableIndexPage/Table/
 import { useBulkSelect } from 'foremanReact/components/PF4/TableIndexPage/Table/TableHooks';
 import { RowSelectTd } from 'foremanReact/components/PF4/TableIndexPage/RowSelectTd';
 import { getColumnHelpers } from 'foremanReact/components/PF4/TableIndexPage/Table/helpers';
+import { getControllerSearchProps, STATUS } from 'foremanReact/constants';
+import SearchBar from 'foremanReact/components/SearchBar';
 import { APIActions } from 'foremanReact/redux/API';
-import { STATUS } from 'foremanReact/constants';
-import {
-  entriesPage,
-  entryFixable,
-} from '../PreupgradeReports/PreupgradeReportsHelpers';
+import { usePreupgradeTableState } from './PreupgradeReportsTableHelpers';
+import { entryFixable } from '../PreupgradeReports/PreupgradeReportsHelpers';
 import ReportDetails, { renderSeverityLabel } from './ReportDetails';
 import './PreupgradeReportsTable.scss';
-
-const LEAPP_TEMPLATE_NAME = 'Run preupgrade via Leapp';
 
 const isRowFixable = entryFixable;
 
@@ -66,141 +63,82 @@ const submitJobInvocation = (
 };
 
 const PreupgradeReportsTable = ({ data = {} }) => {
-  const [error, setError] = useState(null);
   const [isReportExpanded, setIsReportExpanded] = useState(false);
-  const [pagination, setPagination] = useState({ page: 1, perPage: 5 });
-  const [reportData, setReportData] = useState(null);
-  const [status, setStatus] = useState(STATUS.RESOLVED);
-  const [expandedRowIds, setExpandedRowIds] = useState(new Set());
-
+  const [searchInput, setSearchInput] = useState('');
+  const [submitError, setSubmitError] = useState(null);
   const dispatch = useDispatch();
-  // eslint-disable-next-line camelcase
-  const isLeappJob = data?.template_name?.includes(LEAPP_TEMPLATE_NAME);
 
-  const columns = useMemo(
-    () => ({
-      title: { title: __('Title') },
-      host: {
-        title: __('Host'),
-        wrapper: entry => entry.hostname || reportData?.hostname || '-',
+  const {
+    isLeappJob,
+    status,
+    error,
+    rows,
+    totalCount,
+    pagination,
+    sortBy,
+    searchValue,
+    setSearchValue,
+    setPagination,
+    setSortBy,
+    expandedRowIds,
+    toggleRowExpansion,
+    areAllRowsExpanded,
+    onExpandAll,
+    allFilteredRows = rows,
+  } = usePreupgradeTableState(data, isReportExpanded);
+
+  const searchProps = useMemo(() => {
+    const props = getControllerSearchProps('preupgrade_report_entries');
+    return {
+      ...props,
+      autocomplete: {
+        ...props.autocomplete,
+        url: foremanUrl('/preupgrade_report_entries/auto_complete_search'),
       },
-      risk_factor: {
-        title: __('Risk Factor'),
-        wrapper: ({ severity }) => renderSeverityLabel(severity),
-      },
-      has_remediation: {
-        title: __('Has Remediation?'),
-        wrapper: entry => (entry.detail?.remediations ? __('Yes') : __('No')),
-      },
-      inhibitor: {
-        title: __('Inhibitor?'),
-        wrapper: entry =>
-          entry.flags?.some(flag => flag === 'inhibitor') ? (
-            <Tooltip content={__('This issue inhibits the upgrade.')}>
-              <span>{__('Yes')}</span>
-            </Tooltip>
-          ) : (
-            __('No')
-          ),
-      },
-    }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [reportData?.hostname]
-  );
+    };
+  }, []);
 
   useEffect(() => {
-    let isMounted = true;
-    if (!isLeappJob || !isReportExpanded || reportData) return undefined;
+    setSearchInput(searchValue);
+  }, [searchValue]);
 
-    const fail = err => {
-      if (!isMounted) return;
-      setError(err);
-      setStatus(STATUS.ERROR);
-    };
-
-    const succeed = response => {
-      if (!isMounted) return;
-      setReportData(response?.data || response || {});
-      setStatus(STATUS.RESOLVED);
-    };
-
-    setStatus(STATUS.PENDING);
-    dispatch(
-      APIActions.get({
-        key: `GET_LEAPP_REPORT_LIST_${data.id}`,
-        url: `/api/job_invocations/${data.id}/preupgrade_reports`,
-        handleSuccess: listResponse => {
-          if (!isMounted) return;
-          const summary = (listResponse.data || listResponse).results?.[0];
-          if (summary?.id) {
-            dispatch(
-              APIActions.get({
-                key: `GET_LEAPP_REPORT_DETAIL_${summary.id}`,
-                url: `/api/preupgrade_reports/${summary.id}`,
-                handleSuccess: detailResponse => succeed(detailResponse),
-                handleError: err => fail(err),
-              })
-            );
-            return;
-          }
-          succeed();
-        },
-        handleError: err => fail(err),
-      })
-    );
-
-    return () => {
-      isMounted = false;
-    };
-  }, [isReportExpanded, data.id, isLeappJob, reportData, dispatch]);
-
-  // eslint-disable-next-line camelcase
-  const entries = useMemo(() => reportData?.preupgrade_report_entries || [], [
-    reportData,
-  ]);
-
-  const pagedEntries = useMemo(
-    () => entriesPage(entries, pagination),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [entries, pagination.page, pagination.perPage]
-  );
-
-  const getHostId = useCallback(
-    entry =>
-      entry.host_id ||
-      entry.hostId ||
-      // eslint-disable-next-line camelcase
-      reportData?.host_id ||
-      reportData?.host?.id ||
-      // eslint-disable-next-line camelcase
-      data?.targeting?.host_id,
-    [reportData, data]
-  );
-
-  const handleParamsChange = useCallback(newParams => {
-    setPagination(prev => ({
-      ...prev,
-      page: newParams.page || prev.page,
-      perPage: newParams.per_page || prev.perPage,
-    }));
-    setExpandedRowIds(new Set());
-  }, []);
-
-  const toggleRowExpansion = useCallback((id, isExpanding) => {
-    setExpandedRowIds(prev => {
-      const next = new Set(prev);
-      if (isExpanding) next.add(id);
-      else next.delete(id);
-      return next;
-    });
-  }, []);
+  const columns = {
+    title: { title: __('Title'), isSorted: true },
+    hostname: {
+      title: __('Host'),
+      wrapper: e => e.hostname || '-',
+      isSorted: true,
+    },
+    severity: {
+      title: __('Risk Factor'),
+      wrapper: ({ severity }) => renderSeverityLabel(severity),
+      isSorted: true,
+    },
+    has_remediation: {
+      title: __('Has Remediation?'),
+      isSorted: false,
+      wrapper: e => (e.detail?.remediations ? __('Yes') : __('No')),
+    },
+    inhibitor: {
+      title: __('Inhibitor?'),
+      isSorted: false,
+      wrapper: e =>
+        e.flags?.includes('inhibitor') ? (
+          <Tooltip content={__('This issue inhibits the upgrade.')}>
+            <span>{__('Yes')}</span>
+          </Tooltip>
+        ) : (
+          __('No')
+        ),
+    },
+  };
 
   const { inclusionSet, exclusionSet, ...selectAllOptions } = useBulkSelect({
-    results: pagedEntries,
+    results: rows,
     metadata: {
-      total: entries.length,
+      total: totalCount,
       page: pagination.page,
-      selectable: entries.length,
+      selectable: totalCount,
     },
     initialSearchQuery: '',
   });
@@ -214,26 +152,23 @@ const PreupgradeReportsTable = ({ data = {} }) => {
     isSelected,
   } = selectAllOptions;
 
-  const rawSelectedIds =
-    areAllRowsSelected() || exclusionSet.size > 0
-      ? entries.map(e => e.id).filter(id => !exclusionSet.has(id))
-      : Array.from(inclusionSet);
-
   const validFixableIds = useMemo(
-    () => entries.filter(isRowFixable).map(e => e.id),
-    [entries]
+    () => allFilteredRows.filter(isRowFixable).map(e => e.id),
+    [allFilteredRows]
   );
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const rawSelectedIds =
+    areAllRowsSelected() || exclusionSet.size > 0
+      ? allFilteredRows.map(e => e.id).filter(id => !exclusionSet.has(id))
+      : Array.from(inclusionSet);
+
   const selectedIds = useMemo(
     () => rawSelectedIds.filter(id => validFixableIds.includes(id)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [rawSelectedIds.join(','), validFixableIds]
   );
 
-  const pagedFixableEntries = useMemo(() => pagedEntries.filter(isRowFixable), [
-    pagedEntries,
-  ]);
+  const pagedFixableEntries = useMemo(() => rows.filter(isRowFixable), [rows]);
 
   const areAllPageFixableSelected =
     pagedFixableEntries.length > 0 &&
@@ -243,38 +178,63 @@ const PreupgradeReportsTable = ({ data = {} }) => {
     validFixableIds.length > 0 &&
     validFixableIds.every(id => selectedIds.includes(id));
 
-  const areAllRowsExpanded =
-    pagedEntries.length > 0 &&
-    pagedEntries.every(entry => expandedRowIds.has(entry.id));
-
-  const onExpandAll = useCallback(() => {
-    setExpandedRowIds(
-      areAllRowsExpanded ? new Set() : new Set(pagedEntries.map(e => e.id))
-    );
-  }, [areAllRowsExpanded, pagedEntries]);
-
-  const [columnKeys, keysToColumnNames] = useMemo(
-    () => getColumnHelpers(columns),
-    [columns]
+  const getHostId = useCallback(
+    entry => entry.host_id || entry.hostId || data?.targeting?.host_id,
+    [data]
   );
 
   const hostIdsForSelected = useMemo(
     () =>
       Array.from(
         new Set(
-          entries
+          allFilteredRows
             .filter(e => selectedIds.includes(e.id))
             .map(getHostId)
             .filter(Boolean)
         )
       ),
-    [entries, selectedIds, getHostId]
+    [allFilteredRows, selectedIds, getHostId]
   );
 
   const allHostIds = useMemo(
-    () => Array.from(new Set(entries.map(getHostId).filter(Boolean))),
-    [entries, getHostId]
+    () => Array.from(new Set(allFilteredRows.map(getHostId).filter(Boolean))),
+    [allFilteredRows, getHostId]
   );
+
+  const handleParamsChange = newParams => {
+    let sortChanged = false;
+    if (newParams.order !== undefined) {
+      const parts = newParams.order.split(' ');
+      const newIndex = parts[0] || '';
+      const newDirection = (parts[1] || 'ASC').toLowerCase();
+
+      sortChanged =
+        newIndex !== sortBy.index || newDirection !== sortBy.direction;
+
+      if (sortChanged) {
+        setSortBy({ index: newIndex, direction: newDirection });
+      }
+    }
+
+    setPagination({
+      page: sortChanged
+        ? 1
+        : newParams.page !== undefined
+        ? Number(newParams.page)
+        : pagination.page,
+      perPage:
+        newParams.per_page !== undefined
+          ? Number(newParams.per_page)
+          : pagination.perPage,
+    });
+  };
+
+  const commitSearch = val => {
+    setSearchValue(val);
+    setPagination(prev => ({ ...prev, page: 1 }));
+  };
+
+  const [columnKeys, keysToColumnNames] = getColumnHelpers(columns);
 
   if (!isLeappJob) return null;
 
@@ -283,13 +243,26 @@ const PreupgradeReportsTable = ({ data = {} }) => {
     selectedIds.length === 0 ||
     hostIdsForSelected.length === 0;
 
+  const combinedErrorMessage =
+    (status === STATUS.ERROR && error?.message ? error.message : null) ||
+    submitError?.message;
+
   return (
     <ExpandableSection
+      className="leapp-report-section"
       isExpanded={isReportExpanded}
-      onToggle={(_event, val) => setIsReportExpanded(val)}
+      onToggle={(_e, val) => setIsReportExpanded(val)}
       toggleText={__('Leapp preupgrade report')}
     >
-      {entries.length > 0 && status === STATUS.RESOLVED && (
+      <SearchBar
+        data={searchProps}
+        searchQuery={searchInput}
+        onSearch={commitSearch}
+        onChange={val => setSearchInput(val)}
+        bookmarks={searchProps.bookmarks}
+      />
+
+      {totalCount > 0 && status === STATUS.RESOLVED && (
         <Toolbar ouiaId="leapp-report-toolbar">
           <ToolbarContent>
             <ToolbarGroup variant="filter-group">
@@ -317,7 +290,7 @@ const PreupgradeReportsTable = ({ data = {} }) => {
                   onClick={() =>
                     submitJobInvocation(
                       dispatch,
-                      setError,
+                      setSubmitError,
                       'leapp_remediation_plan',
                       hostIdsForSelected,
                       selectedIds.join(',')
@@ -335,7 +308,7 @@ const PreupgradeReportsTable = ({ data = {} }) => {
                   onClick={() =>
                     submitJobInvocation(
                       dispatch,
-                      setError,
+                      setSubmitError,
                       'leapp_upgrade',
                       allHostIds
                     )
@@ -356,28 +329,34 @@ const PreupgradeReportsTable = ({ data = {} }) => {
         isEmbedded
         params={{
           page: pagination.page,
-          perPage: pagination.perPage,
-          order: '',
+          per_page: pagination.perPage,
+          search: searchValue,
+          order: sortBy.index
+            ? `${sortBy.index} ${sortBy.direction.toUpperCase()}`
+            : '',
         }}
-        results={pagedEntries}
-        itemCount={entries.length}
+        page={pagination.page}
+        perPage={pagination.perPage}
+        results={rows}
+        itemCount={totalCount}
         url=""
         isPending={status === STATUS.PENDING}
-        errorMessage={
-          status === STATUS.ERROR && error?.message ? error.message : null
-        }
+        errorMessage={combinedErrorMessage}
         showCheckboxes
         refreshData={() => {}}
         isDeleteable={false}
-        emptyMessage={__('The preupgrade report shows no issues.')}
+        emptyMessage={
+          searchValue
+            ? __('No results found for your search.')
+            : __('The preupgrade report shows no issues.')
+        }
         setParams={handleParamsChange}
         childrenOutsideTbody
         onExpandAll={onExpandAll}
         areAllRowsExpanded={!areAllRowsExpanded}
       >
-        {pagedEntries.map((entry, rowIndex) => {
+        {rows.map((entry, rowIndex) => {
           const isRowExpanded = expandedRowIds.has(entry.id);
-
           return (
             <Tbody
               key={entry.id}
@@ -389,7 +368,7 @@ const PreupgradeReportsTable = ({ data = {} }) => {
                   expand={{
                     rowIndex,
                     isExpanded: isRowExpanded,
-                    onToggle: (_event, _rowIndex, isOpen) =>
+                    onToggle: (_e, _idx, isOpen) =>
                       toggleRowExpansion(entry.id, isOpen),
                   }}
                 />

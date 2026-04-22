@@ -22,9 +22,11 @@ module Api
         get :show, params: { id: @report.id }
         assert_response :success
 
-        response = JSON.parse(@response.body)
-        assert_equal response['id'], @report.id
-        assert_not_empty response['preupgrade_report_entries']
+        body = JSON.parse(@response.body)
+        assert_equal @report.id, body['id']
+        assert_not_empty body['results']
+        assert_not_nil body['total']
+        assert_not_nil body['subtotal']
       end
 
       test 'should get :job_invocation' do
@@ -96,7 +98,7 @@ module Api
           assert_includes JSON.parse(@response.body)['error']['missing_permissions'], 'view_hosts'
         end
 
-        test 'should not get :job_invocation' do
+        test 'should not get :show' do
           get :show, params: { id: @report.id }, session: set_session_user(@user)
           assert_response :forbidden
           assert_includes JSON.parse(@response.body)['error']['missing_permissions'], 'view_hosts'
@@ -107,6 +109,33 @@ module Api
           assert_response :forbidden
           assert_includes JSON.parse(@response.body)['error']['missing_permissions'], 'view_hosts'
         end
+      end
+
+      test 'should filter entries by search on :show' do
+        get :show, params: { id: @report.id, search: "title = \"#{@entry.title}\"" }
+        assert_response :success
+        body = JSON.parse(@response.body)
+        assert_equal 1, body['results'].length
+        assert_equal @entry.id, body['results'].first['id']
+      end
+
+      test 'should sort entries on :show' do
+        FactoryBot.create(:preupgrade_report_entry, host: @host, preupgrade_report: @report,
+                          title: 'Aaa first alphabetically')
+        get :show, params: { id: @report.id, order: 'title ASC' }
+        assert_response :success
+        titles = JSON.parse(@response.body)['results'].map { |e| e['title'] }
+        assert_equal titles.sort, titles
+      end
+
+      test ':show always returns paginated results with total and subtotal' do
+        get :show, params: { id: @report.id }
+        assert_response :success
+        body = JSON.parse(@response.body)
+        assert_not_empty body['results']
+        assert_not_nil body['total']
+        assert_not_nil body['subtotal']
+        assert_equal body['total'], body['subtotal']
       end
     end
   end
