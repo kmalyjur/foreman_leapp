@@ -1,24 +1,48 @@
-import '@testing-library/jest-dom/extend-expect';
-
+import React from 'react';
 import {
-  fireEvent,
   render,
   screen,
   waitFor,
+  fireEvent,
   within,
 } from '@testing-library/react';
-
-import { APIActions } from 'foremanReact/redux/API';
-import PreupgradeReportsTable from '../index';
+import '@testing-library/jest-dom/extend-expect';
 import { Provider } from 'react-redux';
-import React from 'react';
 import configureMockStore from 'redux-mock-store';
 import thunk from 'redux-thunk';
+import { APIActions } from 'foremanReact/redux/API';
+import PreupgradeReportsTable from '../index';
 
 jest.mock('foremanReact/redux/API');
 
-const mockStore = configureMockStore([thunk]);
+jest.mock('foremanReact/constants', () => ({
+  ...jest.requireActual('foremanReact/constants'),
+  getControllerSearchProps: jest.fn(() => ({
+    autocomplete: { url: '' },
+    bookmarks: { controller: 'preupgrade_report_entries', url: '/bookmarks' },
+  })),
+  STATUS: { PENDING: 'PENDING', RESOLVED: 'RESOLVED', ERROR: 'ERROR' },
+}));
 
+jest.mock('foremanReact/Root/Context/ForemanContext', () => ({
+  useForemanSettings: jest.fn(() => ({ perPage: 5 })),
+}));
+
+jest.mock('foremanReact/components/SearchBar', () => {
+  const MockSearchBar = ({ onSearch, searchQuery }) => (
+    <input
+      data-testid="search-input"
+      value={searchQuery || ''}
+      onChange={() => {}}
+      onKeyDown={e => {
+        if (e.key === 'Enter') onSearch(e.target.value);
+      }}
+    />
+  );
+  return MockSearchBar;
+});
+
+const mockStore = configureMockStore([thunk]);
 const mockJobId = 42;
 const mockReportId = 999;
 const mockJobData = {
@@ -26,9 +50,6 @@ const mockJobData = {
   template_name: 'Run preupgrade via Leapp',
 };
 
-// Entry 0 (id=1):  command remediation + inhibitor flag → fixable + selectable
-// Entry 1 (id=2):  hint-only remediation                → has_remediation=Yes, NOT selectable
-// Entries 2-11:    no remediations                      → has_remediation=No,  NOT selectable
 const mockEntries = Array.from({ length: 12 }, (_, i) => ({
   id: i + 1,
   title: `Report Entry ${i + 1}`,
@@ -59,13 +80,18 @@ describe('PreupgradeReportsTable', () => {
 
     APIActions.get.mockImplementation(({ key, handleSuccess }) => {
       return dispatch => {
-        if (key.includes('GET_LEAPP_REPORT_LIST'))
+        if (key.includes('GET_LEAPP_REPORT_LIST')) {
           handleSuccess({ results: [{ id: mockReportId }] });
-        if (key.includes('GET_LEAPP_REPORT_DETAIL'))
+        }
+        if (key.includes('GET_LEAPP_REPORT_DETAIL')) {
           handleSuccess({
             id: mockReportId,
             preupgrade_report_entries: mockEntries,
+            results: mockEntries,
+            total: mockEntries.length,
+            subtotal: mockEntries.length,
           });
+        }
         return { type: 'MOCK_API_SUCCESS' };
       };
     });
@@ -80,8 +106,9 @@ describe('PreupgradeReportsTable', () => {
       </Provider>
     );
 
-  const expandSection = () =>
+  const expandSection = () => {
     fireEvent.click(screen.getByText('Leapp preupgrade report'));
+  };
 
   const waitForTable = () =>
     waitFor(() => screen.getByText('Report Entry 1', { selector: 'td' }));
@@ -108,7 +135,12 @@ describe('PreupgradeReportsTable', () => {
         if (key.includes('GET_LEAPP_REPORT_LIST'))
           handleSuccess({ results: [{ id: mockReportId }] });
         if (key.includes('GET_LEAPP_REPORT_DETAIL'))
-          handleSuccess({ id: mockReportId, preupgrade_report_entries: [] });
+          handleSuccess({
+            id: mockReportId,
+            preupgrade_report_entries: [],
+            results: [],
+            total: 0,
+          });
         return { type: 'EMPTY' };
       };
     });
@@ -131,7 +163,7 @@ describe('PreupgradeReportsTable', () => {
     ).toBeInTheDocument();
   });
 
-  it('expands all rows', async () => {
+  it('expands all rows when expand-all is clicked', async () => {
     renderComponent();
     expandSection();
     await waitForTable();
@@ -142,6 +174,66 @@ describe('PreupgradeReportsTable', () => {
     expect(
       await screen.findByText('Summary for report entry 5')
     ).toBeInTheDocument();
+  });
+
+  it('collapses all rows when expand-all is clicked a second time', async () => {
+    renderComponent();
+    expandSection();
+    await waitForTable();
+
+    const expandAllButton = screen.getByLabelText('Expand all rows');
+    fireEvent.click(expandAllButton); // expand
+    await screen.findByText('Summary for report entry 1');
+    fireEvent.click(expandAllButton); // collapse
+
+    await waitFor(() => {
+      expect(
+        screen.queryByText('Summary for report entry 1')
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  it('calls the show endpoint with search param', async () => {
+    renderComponent();
+    expandSection();
+    await waitForTable();
+
+    const input = screen.getByTestId('search-input');
+    fireEvent.keyDown(input, {
+      key: 'Enter',
+      target: { value: 'title = Report' },
+    });
+
+    await waitFor(() => {
+      const calls = APIActions.get.mock.calls
+        .flat()
+        .filter(
+          arg =>
+            arg?.key?.includes('GET_LEAPP_REPORT_DETAIL') && arg?.params?.search
+        );
+      expect(calls.length).toBeGreaterThan(0);
+      expect(calls[0].params.search).toBe('title = Report');
+    });
+  });
+
+  it('calls the endpoint with sort parameters when a column header is clicked', async () => {
+    renderComponent();
+    expandSection();
+    await waitForTable();
+
+    const titleSortButton = screen.getByRole('button', { name: /Title/i });
+    fireEvent.click(titleSortButton);
+
+    await waitFor(() => {
+      const calls = APIActions.get.mock.calls
+        .flat()
+        .filter(
+          arg =>
+            arg?.key?.includes('GET_LEAPP_REPORT_DETAIL') && arg?.params?.order
+        );
+      const lastCall = calls[calls.length - 1];
+      expect(lastCall.params.order).toContain('title');
+    });
   });
 
   it('paginates to the next page', async () => {
@@ -193,7 +285,6 @@ describe('PreupgradeReportsTable', () => {
     expandSection();
     await waitForTable();
 
-    // id=1: command → Yes
     const row1 = screen
       .getByText('Report Entry 1', { selector: 'td' })
       .closest('tr');
@@ -203,7 +294,6 @@ describe('PreupgradeReportsTable', () => {
       )
     ).toBeInTheDocument();
 
-    // id=2: hint-only → still Yes (display column shows any remediations)
     const row2 = screen
       .getByText('Report Entry 2', { selector: 'td' })
       .closest('tr');
@@ -213,7 +303,6 @@ describe('PreupgradeReportsTable', () => {
       )
     ).toBeInTheDocument();
 
-    // id=3: no remediations → No
     const row3 = screen
       .getByText('Report Entry 3', { selector: 'td' })
       .closest('tr');
@@ -325,7 +414,11 @@ describe('PreupgradeReportsTable', () => {
         if (key.includes('GET_LEAPP_REPORT_LIST'))
           handleSuccess({ results: [{ id: mockReportId }] });
         if (key.includes('GET_LEAPP_REPORT_DETAIL'))
-          handleSuccess({ id: mockReportId, preupgrade_report_entries: [] });
+          handleSuccess({
+            id: mockReportId,
+            results: [],
+            preupgrade_report_entries: [],
+          });
         return { type: 'EMPTY' };
       };
     });

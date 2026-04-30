@@ -1,7 +1,4 @@
+# frozen_string_literal: true
+
 object @preupgrade_report
-
-extends 'api/v2/preupgrade_reports/base'
-
-child :preupgrade_report_entries do
-  extends 'api/v2/preupgrade_report_entries/base'
-end
+attributes :id, :status, :reported_at

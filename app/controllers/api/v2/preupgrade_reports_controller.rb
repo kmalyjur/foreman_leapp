@@ -27,11 +27,10 @@ module Api
 
       private
 
-      # By overriding path_to_authenticate we can require REX's permission view_job_invocations
       def path_to_authenticate
         params['action'] = 'show' if params['action'] == 'job_invocation'
-        Foreman::AccessControl.normalize_path_hash params.slice(:action, :id, :user_id)
-                                                         .merge({ controller: 'api/v2/job_invocations' })
+        path_params = params.slice(:action, :id, :user_id).merge(controller: 'api/v2/job_invocations')
+        Foreman::AccessControl.normalize_path_hash(path_params)
       end
     end
   end
