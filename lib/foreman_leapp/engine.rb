@@ -23,17 +23,6 @@ module ForemanLeapp
           apipie_documented_controllers ["#{ForemanLeapp::Engine.root}/app/controllers/api/v2/*.rb"]
           extend_template_helpers ForemanLeapp::TemplateHelper
 
-          extend_page 'job_invocations/show' do |cx|
-            cx.add_pagelet :main_tabs,
-                          partial: 'job_invocations/leapp_preupgrade_report',
-                          name: _('Leapp preupgrade report'),
-                          id: 'leapp_preupgrade_report',
-                          onlyif: proc { |subject|
-                            ::Helpers::JobHelper.correct_feature?(subject, 'leapp_preupgrade') ||
-                              ::Helpers::JobHelper.correct_feature?(subject, 'leapp_remediation_plan')
-                          }
-          end
-
           security_block :foreman_leapp do
             permission :view_job_invocations, { :preupgrade_reports => %i[index show job_invocation],
                                                 'api/v2/preupgrade_reports' => %i[index show job_invocation] },

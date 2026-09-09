@@ -29,9 +29,15 @@ import { getControllerSearchProps, STATUS } from 'foremanReact/constants';
 import SearchBar from 'foremanReact/components/SearchBar';
 import { APIActions } from 'foremanReact/redux/API';
 import { usePreupgradeTableState } from './PreupgradeReportsTableHelpers';
-import { entryFixable } from '../PreupgradeReports/PreupgradeReportsHelpers';
 import ReportDetails, { renderSeverityLabel } from './ReportDetails';
 import './PreupgradeReportsTable.scss';
+
+const entryWithFixKind = kind => entry =>
+  entry.detail &&
+  entry.detail.remediations &&
+  entry.detail.remediations.some(remediation => remediation.type === kind);
+
+const entryFixable = entryWithFixKind('command');
 
 const isRowFixable = entryFixable;
 

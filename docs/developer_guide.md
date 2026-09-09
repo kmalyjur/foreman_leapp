@@ -7,7 +7,7 @@ The `foreman_leapp` plugin enables the consumer to use a job template to upgrade
 * Select the hosts that you want to upgrade to Red Hat Enterprise Linux 8.
 * In the upper right of the Hosts window, from the Select Action list, select Preupgrade check with Leapp.
 * Click Submit to start the pre-upgrade check.
-* When the check is finished, click the Leapp preupgrade report tab to continue
+* When the check is finished, view the job invocation details to see the preupgrade report
 * Fix the found remediation(s) and run the upgrade job
 * For further information see the documentation links bellow
 
